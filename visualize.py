@@ -805,10 +805,51 @@ class VisualizerApp:
             width=2
         )
 
+    def get_live_obstacle_distance(self, base_inputs):
+        if base_inputs["obstacle_distance_m"] >= 999.0:
+            return 999.0
+
+        rect = self.obstacle_rect_from_inputs(base_inputs)
+        if rect is None:
+            return 999.0
+
+        obs_cx = (rect[0] + rect[2]) / 2.0
+        obs_cy = (rect[1] + rect[3]) / 2.0
+
+        heading_rad = math.radians(self.vehicle_heading_deg)
+        fwd_x = math.sin(heading_rad)
+        fwd_y = -math.cos(heading_rad)
+
+        dx = obs_cx - self.vehicle_x
+        dy = obs_cy - self.vehicle_y
+
+        if dx * fwd_x + dy * fwd_y <= 0:
+            return 999.0
+
+        return max(0.0, math.hypot(dx, dy) / MOTION_PIXELS_PER_MPS)
+
     def refresh_view(self):
         scenario = self.current_scenario()
-        inputs = scenario["inputs"]
-        steering, speed_action = self.run_controller_for_current_scenario()
+        base_inputs = scenario["inputs"]
+
+        inputs = {
+            **base_inputs,
+            "lane_offset_m": self.x_to_lane_offset_m(self.vehicle_x),
+            "heading_error_deg": self.vehicle_heading_deg,
+            "speed_mps": self.vehicle_speed_mps,
+            "obstacle_distance_m": self.get_live_obstacle_distance(base_inputs),
+        }
+
+        steering, speed_action = controller(
+            inputs["obstacle_distance_m"],
+            inputs["lane_offset_m"],
+            inputs["heading_error_deg"],
+            inputs["speed_mps"],
+            inputs["e_stop"],
+            inputs["left_clear"],
+            inputs["right_clear"],
+            inputs["sensor_valid"],
+        )
 
         self.command_steering = steering
         self.command_speed_action = speed_action
