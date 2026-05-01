@@ -44,8 +44,8 @@ def controller(
             "ACCELERATE", "SLOW", "STOP"
     """
 
-    DANGER_OBSTACLE_M = 1.0
-    CAUTION_OBSTACLE_M = 2.0
+    DANGER_OBSTACLE_M = 2.0
+    CAUTION_OBSTACLE_M = 4.0
 
     MILD_HEADING_DEG = 3.0
     LARGE_HEADING_DEG = 15.0
