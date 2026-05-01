@@ -373,7 +373,7 @@ class VisualizerApp:
         dist = self.distance_point_to_segment(cx, cy, x1, y1, x2, y2)
         return dist <= radius
 
-    def get_road_obstacle_segments(self):
+    def get_road_obstacle_segments(self): # segments representing road boundaries for collision detection
         segments = []
 
         segments.append((ROAD_LEFT, ROAD_BOTTOM, ROAD_RIGHT, ROAD_BOTTOM))
