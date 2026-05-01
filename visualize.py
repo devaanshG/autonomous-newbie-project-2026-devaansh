@@ -809,16 +809,16 @@ class VisualizerApp:
         if base_inputs["obstacle_distance_m"] >= 999.0:
             return 999.0
 
-        rect = self.obstacle_rect_from_inputs(base_inputs)
+        rect = self.obstacle_rect_from_inputs(base_inputs) # obstacle rectangle based on current scenario inputs
         if rect is None:
             return 999.0
 
-        obs_cx = (rect[0] + rect[2]) / 2.0
-        obs_cy = (rect[1] + rect[3]) / 2.0
+        obs_cx = (rect[0] + rect[2]) / 2.0 # obstacle center x
+        obs_cy = (rect[1] + rect[3]) / 2.0 # obstacle center y
 
-        heading_rad = math.radians(self.vehicle_heading_deg)
-        fwd_x = math.sin(heading_rad)
-        fwd_y = -math.cos(heading_rad)
+        heading_rad = math.radians(self.vehicle_heading_deg) # car heading in radians
+        fwd_x = math.sin(heading_rad) # forward direction x-component
+        fwd_y = -math.cos(heading_rad) # forward direction y-component
 
         dx = obs_cx - self.vehicle_x
         dy = obs_cy - self.vehicle_y
@@ -828,9 +828,35 @@ class VisualizerApp:
 
         return max(0.0, math.hypot(dx, dy) / MOTION_PIXELS_PER_MPS)
 
+    def get_live_side_clear(self, base_inputs):
+        heading_rad = math.radians(self.vehicle_heading_deg)
+        left_dir = (-math.cos(heading_rad), -math.sin(heading_rad))
+        right_dir = (math.cos(heading_rad), math.sin(heading_rad))
+        segments = self.get_road_obstacle_segments()
+
+        def ray_min_dist(direction):
+            rx, ry = direction
+            min_t = float("inf")
+            for x1, y1, x2, y2 in segments:
+                dx, dy = x2 - x1, y2 - y1
+                denom = rx * dy - ry * dx
+                if abs(denom) < 1e-9:
+                    continue
+                qpx, qpy = x1 - self.vehicle_x, y1 - self.vehicle_y
+                t = (qpx * dy - qpy * dx) / denom
+                s = (qpx * ry - qpy * rx) / denom
+                if t >= 0 and 0.0 <= s <= 1.0:
+                    min_t = min(min_t, t)
+            return min_t
+
+        left_clear = base_inputs["left_clear"] and ray_min_dist(left_dir) > SIDE_ROAD_WIDTH_PX
+        right_clear = base_inputs["right_clear"] and ray_min_dist(right_dir) > SIDE_ROAD_WIDTH_PX
+        return left_clear, right_clear
+
     def refresh_view(self):
         scenario = self.current_scenario()
         base_inputs = scenario["inputs"]
+        live_left_clear, live_right_clear = self.get_live_side_clear(base_inputs)
 
         inputs = {
             **base_inputs,
@@ -838,6 +864,8 @@ class VisualizerApp:
             "heading_error_deg": self.vehicle_heading_deg,
             "speed_mps": self.vehicle_speed_mps,
             "obstacle_distance_m": self.get_live_obstacle_distance(base_inputs),
+            "left_clear": live_left_clear,
+            "right_clear": live_right_clear,
         }
 
         steering, speed_action = controller(
@@ -869,7 +897,7 @@ class VisualizerApp:
         )
         self.output_label.config(text=output_text)
 
-        self.draw_scene(inputs, steering, speed_action)
+        self.draw_scene(base_inputs, steering, speed_action)
 
     def draw_scene(self, inputs, steering, speed_action):
         self.canvas.delete("all")
