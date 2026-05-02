@@ -44,8 +44,8 @@ def controller(
             "ACCELERATE", "SLOW", "STOP"
     """
 
-    DANGER_OBSTACLE_M = 1.0
-    CAUTION_OBSTACLE_M = 2.0
+    DANGER_OBSTACLE_M = 1.7
+    CAUTION_OBSTACLE_M = 3.0
 
     MILD_HEADING_DEG = 3.0
     LARGE_HEADING_DEG = 15.0
@@ -74,22 +74,8 @@ def controller(
 
     # If there's an obstacle very close, we want to stop and steer away from it if possible
     if obstacle_distance_m <= DANGER_OBSTACLE_M:
-        if not left_clear and not right_clear: # Both sides blocked, stop
-            steering = "STRAIGHT"
-            speed_action = "STOP"
-
-        elif left_clear and not right_clear: # Left clear, right blocked, steer left
-            steering = "LEFT"
-            speed_action = "SLOW"
-
-        elif right_clear and not left_clear: # Right clear, left blocked, steer right
-            steering = "RIGHT"
-            speed_action = "SLOW"
-
-        # Choose left arbritrarily if both sides are clear, since the obstacle is directly ahead and we just need to pick a direction to steer
-        else:
-            steering = "LEFT"
-            speed_action = "SLOW"
+        steering = "STRAIGHT"
+        speed_action = "STOP"
 
     # If there's an obstacle moderately close, we want to slow down and steer away from it if possible
     elif obstacle_distance_m <= CAUTION_OBSTACLE_M:
@@ -106,7 +92,7 @@ def controller(
             speed_action = "SLOW"
 
         else:
-            steering = "STRAIGHT"
+            steering = "LEFT"
             speed_action = "SLOW"
 
     # If we're going fast, we want to be more cautious about lane keeping
