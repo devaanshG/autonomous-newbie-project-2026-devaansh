@@ -454,6 +454,10 @@ class VisualizerApp:
         return self.vehicle_rotated_cache[rounded_deg]
 
     def reset_vehicle_state(self):
+        import controller as ctrl
+        ctrl._state = "LANE_FOLLOW"
+        ctrl._avoidance_side = "LEFT"
+
         scenario = self.current_scenario()
         inputs = scenario["inputs"]
 
@@ -816,17 +820,22 @@ class VisualizerApp:
         obs_cx = (rect[0] + rect[2]) / 2.0 # obstacle center x
         obs_cy = (rect[1] + rect[3]) / 2.0 # obstacle center y
 
-        heading_rad = math.radians(self.vehicle_heading_deg) # car heading in radians
-        fwd_x = math.sin(heading_rad) # forward direction x-component
-        fwd_y = -math.cos(heading_rad) # forward direction y-component
+        heading_rad = math.radians(self.vehicle_heading_deg)
+        fwd_x = math.sin(heading_rad)
+        fwd_y = -math.cos(heading_rad)
 
         dx = obs_cx - self.vehicle_x
         dy = obs_cy - self.vehicle_y
 
-        if dx * fwd_x + dy * fwd_y <= 0:
+        dist_px = math.hypot(dx, dy)
+        if dist_px == 0:
+            return 0.0
+
+        cos_angle = (dx * fwd_x + dy * fwd_y) / dist_px
+        if cos_angle < math.cos(math.radians(150)):  # ignore rear 60° (300° front scan)
             return 999.0
 
-        return max(0.0, math.hypot(dx, dy) / MOTION_PIXELS_PER_MPS)
+        return max(0.0, dist_px / MOTION_PIXELS_PER_MPS)
 
     def get_live_side_clear(self, base_inputs):
         heading_rad = math.radians(self.vehicle_heading_deg)

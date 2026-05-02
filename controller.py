@@ -22,6 +22,9 @@
 VALID_STEERING = {"LEFT", "RIGHT", "STRAIGHT"}
 VALID_SPEED = {"ACCELERATE", "SLOW", "STOP"}
 
+_state = "LANE_FOLLOW"   # "LANE_FOLLOW" | "AVOIDING"
+_avoidance_side = "LEFT"
+
 
 def controller(
     obstacle_distance_m,
@@ -43,6 +46,7 @@ def controller(
         speed_action:
             "ACCELERATE", "SLOW", "STOP"
     """
+    global _state, _avoidance_side
 
     DANGER_OBSTACLE_M = 2.0
     CAUTION_OBSTACLE_M = 5.0
@@ -55,90 +59,72 @@ def controller(
 
     HIGH_SPEED_MPS = 3.0
 
-    centered = abs(lane_offset_m) <= MILD_OFFSET_M
-    small_heading_error = abs(heading_error_deg) <= MILD_HEADING_DEG
-
-    steering = "STRAIGHT"
-    speed_action = "ACCELERATE"
-
-    #-------- Critical conditions that override all other logic -------
+    # -------- Critical overrides -------
 
     if not sensor_valid:
+        _state = "LANE_FOLLOW"
         return "STRAIGHT", "STOP"
 
     if e_stop:
+        _state = "LANE_FOLLOW"
         return "STRAIGHT", "STOP"
 
-    #-------- Normal conditions - lane keeping and obstacle avoidance logic -------
-    # If multiple conditions are met, the most critical one takes precedence
+    # -------- AVOIDING state: commit to chosen side until obstacle is clear -------
 
-    # If there's an obstacle very close, we want to stop and steer away from it if possible
-    if obstacle_distance_m <= DANGER_OBSTACLE_M:
-        if not left_clear and not right_clear: # Both sides blocked, stop
-            steering = "STRAIGHT"
-            speed_action = "STOP"
-
-        elif left_clear and not right_clear: # Left clear, right blocked, steer left
-            steering = "LEFT"
-            speed_action = "SLOW"
-
-        elif right_clear and not left_clear: # Right clear, left blocked, steer right
-            steering = "RIGHT"
-            speed_action = "SLOW"
-
-        # Choose left arbritrarily if both sides are clear, since the obstacle is directly ahead and we just need to pick a direction to steer
+    if _state == "AVOIDING":
+        if obstacle_distance_m > CAUTION_OBSTACLE_M:
+            _state = "LANE_FOLLOW"
         else:
-            steering = "LEFT"
-            speed_action = "SLOW"
+            if not left_clear and not right_clear:
+                return "STRAIGHT", "STOP"
+            return _avoidance_side, "SLOW"
 
-    # If there's an obstacle moderately close, we want to slow down and steer away from it if possible
+    # -------- LANE_FOLLOW state -------
+
+    centered = abs(lane_offset_m) <= MILD_OFFSET_M
+    small_heading_error = abs(heading_error_deg) <= MILD_HEADING_DEG
+
+    if obstacle_distance_m <= DANGER_OBSTACLE_M:
+        if not left_clear and not right_clear:
+            return "STRAIGHT", "STOP"
+        elif left_clear and not right_clear:
+            _avoidance_side = "LEFT"
+        elif right_clear and not left_clear:
+            _avoidance_side = "RIGHT"
+        else:
+            _avoidance_side = "LEFT"
+        _state = "AVOIDING"
+        return _avoidance_side, "SLOW"
+
     elif obstacle_distance_m <= CAUTION_OBSTACLE_M:
         if not left_clear and not right_clear:
-            steering = "STRAIGHT"
-            speed_action = "STOP"
-
+            return "STRAIGHT", "STOP"
         elif left_clear and not right_clear:
-            steering = "LEFT"
-            speed_action = "SLOW"
-
+            return "LEFT", "SLOW"
         elif right_clear and not left_clear:
-            steering = "RIGHT"
-            speed_action = "SLOW"
-
+            return "RIGHT", "SLOW"
         else:
-            steering = "STRAIGHT"
-            speed_action = "SLOW"
+            return "STRAIGHT", "SLOW"
 
-    # If we're going fast, we want to be more cautious about lane keeping
-    elif speed_mps >= HIGH_SPEED_MPS: 
-        if heading_error_deg > LARGE_HEADING_DEG or lane_offset_m > LARGE_OFFSET_M: # Too far right, steer left
-            steering = "LEFT"
-            speed_action = "SLOW"
+    elif speed_mps >= HIGH_SPEED_MPS:
+        if heading_error_deg > LARGE_HEADING_DEG or lane_offset_m > LARGE_OFFSET_M:
+            return "LEFT", "SLOW"
+        elif heading_error_deg < -LARGE_HEADING_DEG or lane_offset_m < -LARGE_OFFSET_M:
+            return "RIGHT", "SLOW"
 
-        elif heading_error_deg < -LARGE_HEADING_DEG or lane_offset_m < -LARGE_OFFSET_M: # Too far left, steer right
-            steering = "RIGHT"
-            speed_action = "SLOW"
-
-    # If we're significantly off course, we want to correct aggressively regardless of speed
-    elif heading_error_deg > LARGE_HEADING_DEG or lane_offset_m > LARGE_OFFSET_M: 
-        steering = "LEFT"
-        speed_action = "ACCELERATE"
+    elif heading_error_deg > LARGE_HEADING_DEG or lane_offset_m > LARGE_OFFSET_M:
+        return "LEFT", "ACCELERATE"
 
     elif heading_error_deg < -LARGE_HEADING_DEG or lane_offset_m < -LARGE_OFFSET_M:
-        steering = "RIGHT"
-        speed_action = "ACCELERATE"
+        return "RIGHT", "ACCELERATE"
 
-    # If we're mildly off course, we want to correct gently
     elif heading_error_deg > MILD_HEADING_DEG or lane_offset_m > MILD_OFFSET_M:
-            steering = "LEFT"
-            speed_action = "SLOW"
+        return "LEFT", "SLOW"
 
     elif heading_error_deg < -MILD_HEADING_DEG or lane_offset_m < -MILD_OFFSET_M:
-            steering = "RIGHT"
-            speed_action = "SLOW"
+        return "RIGHT", "SLOW"
 
     elif centered and small_heading_error:
-        steering = "STRAIGHT"
-        speed_action = "ACCELERATE"
+        return "STRAIGHT", "ACCELERATE"
 
-    return steering, speed_action
+    return "STRAIGHT", "ACCELERATE"
